@@ -161,7 +161,7 @@ struct TransactionHistoryView: View {
         .onAppear {
             fetchTransactions()
         }
-        .navigationBarItems(leading: NavigationLink("Back", destination: DashboardView()))
+
     }
 
     private func fetchTransactions() {
@@ -206,7 +206,7 @@ struct TransactionWithFriend: View {
                     .cornerRadius(8)
             }
         }
-        .navigationBarItems(leading: NavigationLink("Back", destination: DashboardView()))
+
     }
 
     private func fetchTransactions() {
@@ -291,7 +291,7 @@ struct FriendsListView: View {
             .onAppear {
                 fetchFriends()
             }
-            .navigationBarItems(leading: NavigationLink("Back", destination: DashboardView()),
+            .navigationBarItems(
                                 trailing: NavigationLink(destination: AddFriendView()) {
                                     Text("Add Friend")
                                 })
