@@ -14,9 +14,9 @@ struct ContentView: View {
             } else {
                 DashboardView()
                 /*
-                WelcomeView(email: $email, password: $password, isLoggedIn: $isLoggedIn)
-                    .navigationTitle("Welcome")
-                */
+                 WelcomeView(email: $email, password: $password, isLoggedIn: $isLoggedIn)
+                 .navigationTitle("Welcome")
+                 */
             }
         }
     }
@@ -66,13 +66,13 @@ struct DashboardView: View {
                 .font(.title)
                 .padding()
             NavigationLink(destination: FriendsListView()) {
-                            Text("Manage Friends")
-                                .foregroundColor(.white)
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(Color.green) // Use a different color for the friends button
-                                .cornerRadius(8)
-                        }
+                Text("Manage Friends")
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color.green) // Use a different color for the friends button
+                    .cornerRadius(8)
+            }
             NavigationLink(destination: AddExpenseView()) {
                 Text("Add an Expense")
                     .foregroundColor(.white)
@@ -228,6 +228,8 @@ struct TransactionWithFriend: View {
 struct AddTransactionView: View {
     @State private var totalAmount = ""
     @State private var description = ""
+    @Environment(\.presentationMode) var presentationMode
+
     var selectedFriend: Friend
 
     var body: some View {
@@ -269,7 +271,7 @@ struct AddTransactionView: View {
             if let error = error {
                 print("Error adding transaction: \(error.localizedDescription)")
             } else {
-                // Transaction added successfully, you may navigate back or perform other actions
+                self.presentationMode.wrappedValue.dismiss()
             }
         }
     }
@@ -280,22 +282,24 @@ struct AddTransactionView: View {
 
 struct FriendsListView: View {
     @State private var friends: [Friend] = []
-        @State private var selectedFriend: Friend?
+    @State private var selectedFriend: Friend?
+    
 
-        var body: some View {
-            List(friends, id: \.id) { friend in
-                NavigationLink(destination: TransactionWithFriend(selectedFriend: friend)) {
-                    Text(friend.name)
-                }
+
+    var body: some View {
+        List(friends, id: \.id) { friend in
+            NavigationLink(destination: TransactionWithFriend(selectedFriend: friend)) {
+                Text(friend.name)
             }
-            .onAppear {
-                fetchFriends()
-            }
-            .navigationBarItems(
-                                trailing: NavigationLink(destination: AddFriendView()) {
-                                    Text("Add Friend")
-                                })
         }
+        .onAppear {
+            fetchFriends()
+        }
+        .navigationBarItems(
+            trailing: NavigationLink(destination: AddFriendView()) {
+                Text("Add Friend")
+            })
+    }
     private func fetchFriends() {
         let db = Firestore.firestore()
         db.collection("friends").getDocuments { snapshot, error in
@@ -315,6 +319,7 @@ struct FriendsListView: View {
 }
 struct AddFriendView: View {
     @State private var newFriendName = ""
+    @Environment(\.presentationMode) var presentationMode
 
     var body: some View {
         VStack {
@@ -347,7 +352,7 @@ struct AddFriendView: View {
             if let error = error {
                 print("Error adding friend: \(error.localizedDescription)")
             } else {
-                //print("Friend added successfully")
+                self.presentationMode.wrappedValue.dismiss()
             }
         }
     }
