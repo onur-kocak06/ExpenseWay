@@ -73,7 +73,7 @@ struct DashboardView: View {
                     .background(Color.green) // Use a different color for the friends button
                     .cornerRadius(8)
             }
-            NavigationLink(destination: AddExpenseView()) {
+            NavigationLink(destination: AddTransactionView()) {
                 Text("Add an Expense")
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity)
@@ -96,11 +96,11 @@ struct DashboardView: View {
     }
 }
 
-struct AddExpenseView: View {
+struct AddTransactionView: View {
     @State private var totalAmount = ""
     @State private var payerName = ""
     @State private var description = ""
-
+    @Environment(\.presentationMode) var presentationMode
     var body: some View {
         Form {
             TextField("Total Amount", text: $totalAmount)
@@ -129,39 +129,42 @@ struct AddExpenseView: View {
         }
 
         let db = Firestore.firestore()
+        let newTransactionRef = db.collection("transactions").document()
         let transactionData: [String: Any] = [
-            "id": UUID().uuidString, // Generate a unique ID
+            "id": newTransactionRef.documentID,
             "totalAmount": amount,
             "payerName": payerName,
             "description": description,
-            "timestamp": FieldValue.serverTimestamp() // Add timestamp for sorting
+            "timestamp": FieldValue.serverTimestamp()
         ]
 
-        db.collection("transactions").addDocument(data: transactionData) { error in
+        newTransactionRef.setData(transactionData) { error in
             if let error = error {
                 print("Error adding transaction: \(error.localizedDescription)")
             } else {
-                //print("Transaction added successfully")
-                // Close the sheet or navigate to another view if needed
+                self.presentationMode.wrappedValue.dismiss()
             }
         }
+
     }
 }
 struct TransactionHistoryView: View {
     @State private var transactions: [Transaction] = []
+    @State private var selectedTransaction: Transaction?
 
     var body: some View {
         List(transactions) { transaction in
-            VStack(alignment: .leading) {
-                Text("Amount: \(transaction.totalAmount)")
-                Text("Payer: \(transaction.payerName)")
-                Text("Description: \(transaction.description)")
+            NavigationLink(destination: TransactionDetailsView(transaction: transaction)) {
+                VStack(alignment: .leading) {
+                    Text("Amount: \(transaction.totalAmount)")
+                    Text("Payer: \(transaction.payerName)")
+                    Text("Description: \(transaction.description)")
+                }
             }
         }
         .onAppear {
             fetchTransactions()
         }
-
     }
 
     private func fetchTransactions() {
@@ -171,12 +174,52 @@ struct TransactionHistoryView: View {
                 print("Error fetching transactions: \(error.localizedDescription)")
             } else {
                 transactions = snapshot?.documents.compactMap { document in
-                    //print(document.data())
                     return try? document.data(as: Transaction.self)
                 } ?? []
             }
         }
     }
+}
+struct TransactionDetailsView: View {
+    var transaction: Transaction
+    @Environment(\.presentationMode) var presentationMode
+
+
+    var body: some View {
+        VStack(alignment: .leading) {
+            Text("Amount: \(transaction.totalAmount)")
+            Text("Payer: \(transaction.payerName)")
+            Text("Description: \(transaction.description)")
+
+            Button(action: {
+                deleteTransaction()
+            }) {
+                Text("Delete Transaction")
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color.red)
+                    .cornerRadius(8)
+            }
+        }
+        .padding()
+        .navigationTitle("Transaction Details")
+    }
+
+    private func deleteTransaction() {
+        print("Deleting transaction with ID: \(transaction.id)")
+        let db = Firestore.firestore()
+        db.collection("transactions").document(transaction.id).delete { error in
+            if let error = error {
+                print("Error deleting transaction: \(error.localizedDescription)")
+            } else {
+                //print("Transaction deleted successfully")
+                self.presentationMode.wrappedValue.dismiss()
+            }
+        }
+    }
+
+
 }
 
 struct TransactionWithFriend: View {
@@ -197,7 +240,7 @@ struct TransactionWithFriend: View {
                 fetchTransactions()
             }
 
-            NavigationLink(destination: AddTransactionView(selectedFriend: selectedFriend)) {
+            NavigationLink(destination: AddTransactionWithFriendView(selectedFriend: selectedFriend)) {
                 Text("Add Transaction with \(selectedFriend.name)")
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity)
@@ -225,7 +268,7 @@ struct TransactionWithFriend: View {
             }
     }
 }
-struct AddTransactionView: View {
+struct AddTransactionWithFriendView: View {
     @State private var totalAmount = ""
     @State private var description = ""
     @Environment(\.presentationMode) var presentationMode
@@ -238,7 +281,7 @@ struct AddTransactionView: View {
             TextField("Description", text: $description)
 
             Button(action: {
-                addTransaction()
+                addTransactionSpecific()
             }) {
                 Text("Add Transaction")
                     .foregroundColor(.white)
@@ -252,28 +295,30 @@ struct AddTransactionView: View {
         .navigationTitle("Add Transaction with \(selectedFriend.name)")
     }
 
-    private func addTransaction() {
+    private func addTransactionSpecific() {
         guard let amount = Double(totalAmount) else {
             // Handle invalid amount
             return
         }
 
         let db = Firestore.firestore()
+        let newTransactionRef = db.collection("transactions").document()
         let transactionData: [String: Any] = [
-            "id": UUID().uuidString,
+            "id": newTransactionRef.documentID,
             "totalAmount": amount,
             "payerName": selectedFriend.name,
             "description": description,
             "timestamp": FieldValue.serverTimestamp()
         ]
 
-        db.collection("transactions").addDocument(data: transactionData) { error in
+        newTransactionRef.setData(transactionData) { error in
             if let error = error {
                 print("Error adding transaction: \(error.localizedDescription)")
             } else {
                 self.presentationMode.wrappedValue.dismiss()
             }
         }
+
     }
 }
 
@@ -359,20 +404,12 @@ struct AddFriendView: View {
 }
 
 
-struct FriendsSelectionView: View {
-    @Binding var selectedFriends: [String]
 
-    var body: some View {
-        // Implement UI to select friends from the list
-        // Update the selectedFriends array accordingly
-        Text("Select Friends")
-    }
-}
 
 struct Friend: Identifiable, Codable {
     var id: String
     var name: String
-    // Add any other properties you need for a friend
+    
 }
 struct Transaction: Identifiable, Codable {
     var id: String
@@ -387,6 +424,7 @@ struct Transaction: Identifiable, Codable {
         case payerName
         case description
         case timestamp
+        
     }
 }
 
