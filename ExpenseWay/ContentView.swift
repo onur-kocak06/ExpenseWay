@@ -1,6 +1,7 @@
 import SwiftUI
 import Firebase
 import FirebaseFirestore
+import SwiftUICharts
 
 struct ContentView: View {
     @State private var email = ""
@@ -16,7 +17,7 @@ struct ContentView: View {
                 /*
                  WelcomeView(email: $email, password: $password, isLoggedIn: $isLoggedIn)
                  .navigationTitle("Welcome")
-                 */
+                */
             }
         }
     }
@@ -44,10 +45,30 @@ struct WelcomeView: View {
                     .background(Color.blue)
                     .cornerRadius(8)
             }
+            Button(action: {
+                            signUpWithFirebase()
+                        }) {
+                            Text("Sign Up")
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background(Color.green)
+                                .cornerRadius(8)
+                        }
         }
         .padding()
+        
     }
-
+    private func signUpWithFirebase() {
+           Auth.auth().createUser(withEmail: email, password: password) { result, error in
+               if let error = error {
+                   print("Sign up failed: \(error.localizedDescription)")
+               } else {
+                   isLoggedIn = true
+                   // Additional handling after successful sign-up, if needed
+               }
+           }
+       }
     private func loginWithFirebase() {
         Auth.auth().signIn(withEmail: email, password: password) { result, error in
             if let error = error {
@@ -90,6 +111,15 @@ struct DashboardView: View {
                     .background(Color.blue)
                     .cornerRadius(8)
             }
+            NavigationLink(destination:  ExpensesPieChartView()) {
+                Text("Transaction History")
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color.black)
+                    .cornerRadius(8)
+            }
+
 
         }
         .padding()
@@ -98,13 +128,29 @@ struct DashboardView: View {
 
 struct AddTransactionView: View {
     @State private var totalAmount = ""
-    @State private var payerName = ""
+    @State private var selectedFriendIndex = 0
+    @State private var selectedCategoryIndex = 0
+    @State private var friends: [Friend] = []
     @State private var description = ""
     @Environment(\.presentationMode) var presentationMode
+
+    // Assuming friends and categories are arrays of Friend and Category objects
+
+    let categories: [String] = ["Groceries", "Hobie"]
+
     var body: some View {
         Form {
             TextField("Total Amount", text: $totalAmount)
-            TextField("Payer Name", text: $payerName)
+            Picker("Select Payer", selection: $selectedFriendIndex) {
+                ForEach(0..<friends.count, id: \.self) { index in
+                    Text(friends[index].name)
+                }
+            }
+            Picker("Select Category", selection: $selectedCategoryIndex) {
+                ForEach(0..<categories.count, id: \.self) { index in
+                    Text(categories[index])
+                }
+            }
             TextField("Description", text: $description)
 
             Button(action: {
@@ -118,22 +164,46 @@ struct AddTransactionView: View {
                     .cornerRadius(8)
             }
         }
+        .onAppear {
+            fetchFriends()
+        }
         .padding()
         .navigationTitle("Add an Expense")
     }
+    private func fetchFriends() {
+        let db = Firestore.firestore()
+        db.collection("friends").getDocuments { snapshot, error in
+            if let error = error {
+                print("Error fetching friends: \(error.localizedDescription)")
+            } else {
+                friends = snapshot?.documents.compactMap { document in
+                    //print("Friend document data: \(document.data())")
 
+                    return try? document.data(as: Friend.self)
+                } ?? []
+
+                //print("Fetched friends: \(friends)")
+            }
+        }
+    }
     private func addTransaction() {
-        guard let amount = Double(totalAmount) else {
-            // Handle invalid amount
+        guard let amount = Double(totalAmount),
+              selectedFriendIndex < friends.count,
+              selectedCategoryIndex < categories.count else {
+            // Handle invalid amount, friend selection, or category selection
             return
         }
+
+        let selectedFriend = friends[selectedFriendIndex]
+        let selectedCategory = categories[selectedCategoryIndex]
 
         let db = Firestore.firestore()
         let newTransactionRef = db.collection("transactions").document()
         let transactionData: [String: Any] = [
             "id": newTransactionRef.documentID,
             "totalAmount": amount,
-            "payerName": payerName,
+            "payerName": selectedFriend.name,
+            "category": selectedCategory,
             "description": description,
             "timestamp": FieldValue.serverTimestamp()
         ]
@@ -145,9 +215,10 @@ struct AddTransactionView: View {
                 self.presentationMode.wrappedValue.dismiss()
             }
         }
-
     }
 }
+
+
 struct TransactionHistoryView: View {
     @State private var transactions: [Transaction] = []
     @State private var selectedTransaction: Transaction?
@@ -165,7 +236,9 @@ struct TransactionHistoryView: View {
         .onAppear {
             fetchTransactions()
         }
+        .navigationTitle("Transactions")
     }
+
 
     private func fetchTransactions() {
         let db = Firestore.firestore()
@@ -332,6 +405,7 @@ struct FriendsListView: View {
 
 
     var body: some View {
+        
         List(friends, id: \.id) { friend in
             NavigationLink(destination: TransactionWithFriend(selectedFriend: friend)) {
                 Text(friend.name)
@@ -340,11 +414,15 @@ struct FriendsListView: View {
         .onAppear {
             fetchFriends()
         }
+        .navigationTitle("Friends")
         .navigationBarItems(
+
+
             trailing: NavigationLink(destination: AddFriendView()) {
                 Text("Add Friend")
             })
     }
+    
     private func fetchFriends() {
         let db = Firestore.firestore()
         db.collection("friends").getDocuments { snapshot, error in
@@ -403,9 +481,70 @@ struct AddFriendView: View {
     }
 }
 
+struct ExpensesPieChartView: View {
+    @State private var data: [ExpenseData] = []
+
+    var body: some View {
+        VStack {
+            if !data.isEmpty {
+                PieChartView(data: data.map { $0.value }, title: "Expenses by Category", form: CGSize(width: 300, height: 300), dropShadow: false
 
 
+                )
 
+                    .padding()
+            } else {
+                Text("No data available.")
+                    .padding()
+            }
+        }
+        .onAppear {
+            fetchData()
+        }
+    }
+
+    private func fetchData() {
+
+        let db = Firestore.firestore()
+        db.collection("transactions").getDocuments { snapshot, error in
+            if let error = error {
+                print("Error fetching transactions: \(error.localizedDescription)")
+            } else {
+                let transactions = snapshot?.documents.compactMap { document in
+                    return try? document.data(as: Transaction.self)
+                } ?? []
+
+
+                let groupedByCategory = Dictionary(grouping: transactions, by: { $0.category })
+
+
+                guard let groceriesExpenses = groupedByCategory["Groceries"],
+                      let hobbiesExpenses = groupedByCategory["Hobie"] else {
+
+                    print("Not enough data for both Groceries and Hobbies.")
+                    return
+                }
+
+
+                let totalGroceriesExpenses = groceriesExpenses.reduce(0) { $0 + $1.totalAmount }
+                let totalHobbiesExpenses = hobbiesExpenses.reduce(0) { $0 + $1.totalAmount }
+
+                data = [
+                    ExpenseData(name: "Groceries", value: totalGroceriesExpenses,color: .blue),
+                    ExpenseData(name: "Hobbies", value: totalHobbiesExpenses,color: .red)
+                ]
+            }
+        }
+    }
+}
+
+// Define ExpenseData structure
+struct ExpenseData: Identifiable {
+    var id = UUID()
+    var name: String
+    var value: Double
+    var color: Color
+}
 struct Friend: Identifiable, Codable {
     var id: String
     var name: String
@@ -415,6 +554,7 @@ struct Transaction: Identifiable, Codable {
     var id: String
     var totalAmount: Double
     var payerName: String
+    var category: String
     var description: String
     var timestamp: Timestamp
 
@@ -422,6 +562,7 @@ struct Transaction: Identifiable, Codable {
         case id
         case totalAmount
         case payerName
+        case category
         case description
         case timestamp
         
