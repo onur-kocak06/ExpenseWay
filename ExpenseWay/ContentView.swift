@@ -14,6 +14,7 @@ struct ContentView: View {
                 DashboardView()
             } else {
                 DashboardView()
+                //Pie()
                 /*
                  WelcomeView(email: $email, password: $password, isLoggedIn: $isLoggedIn)
                  .navigationTitle("Welcome")
@@ -65,7 +66,7 @@ struct WelcomeView: View {
                    print("Sign up failed: \(error.localizedDescription)")
                } else {
                    isLoggedIn = true
-                   // Additional handling after successful sign-up, if needed
+
                }
            }
        }
@@ -91,7 +92,7 @@ struct DashboardView: View {
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity)
                     .padding()
-                    .background(Color.green) // Use a different color for the friends button
+                    .background(Color.green)
                     .cornerRadius(8)
             }
             NavigationLink(destination: AddTransactionView()) {
@@ -111,8 +112,8 @@ struct DashboardView: View {
                     .background(Color.blue)
                     .cornerRadius(8)
             }
-            NavigationLink(destination:  ExpensesPieChartView()) {
-                Text("Transaction History")
+            NavigationLink(destination:  Pie()) {
+                Text("See charts")
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity)
                     .padding()
@@ -134,9 +135,8 @@ struct AddTransactionView: View {
     @State private var description = ""
     @Environment(\.presentationMode) var presentationMode
 
-    // Assuming friends and categories are arrays of Friend and Category objects
 
-    let categories: [String] = ["Groceries", "Hobie"]
+    let categories: [String] = ["Groceries", "Utilities", "Transport", "Gift and donations", "Restaurant", "Clothing", "Other"]
 
     var body: some View {
         Form {
@@ -190,7 +190,7 @@ struct AddTransactionView: View {
         guard let amount = Double(totalAmount),
               selectedFriendIndex < friends.count,
               selectedCategoryIndex < categories.count else {
-            // Handle invalid amount, friend selection, or category selection
+
             return
         }
 
@@ -280,7 +280,7 @@ struct TransactionDetailsView: View {
     }
 
     private func deleteTransaction() {
-        print("Deleting transaction with ID: \(transaction.id)")
+        //print("Deleting transaction with ID: \(transaction.id)")
         let db = Firestore.firestore()
         db.collection("transactions").document(transaction.id).delete { error in
             if let error = error {
@@ -302,7 +302,7 @@ struct TransactionWithFriend: View {
     var body: some View {
         VStack {
             List(transactions) { transaction in
-                // Display transactions for the selected friend
+
                 VStack(alignment: .leading) {
                     Text("Amount: \(transaction.totalAmount)")
                     Text("Payer: \(transaction.payerName)")
@@ -312,6 +312,7 @@ struct TransactionWithFriend: View {
             .onAppear {
                 fetchTransactions()
             }
+            .navigationTitle(selectedFriend.name)
 
             NavigationLink(destination: AddTransactionWithFriendView(selectedFriend: selectedFriend)) {
                 Text("Add Transaction with \(selectedFriend.name)")
@@ -344,13 +345,23 @@ struct TransactionWithFriend: View {
 struct AddTransactionWithFriendView: View {
     @State private var totalAmount = ""
     @State private var description = ""
+    @State private var selectedCategoryIndex = 0
     @Environment(\.presentationMode) var presentationMode
 
     var selectedFriend: Friend
 
+    let categories: [String] = ["Groceries", "Utilities", "Transport", "Gift and donations", "Restaurant", "Clothing", "Other"]
+
     var body: some View {
         Form {
             TextField("Total Amount", text: $totalAmount)
+
+            Picker("Select Category", selection: $selectedCategoryIndex) {
+                ForEach(0..<categories.count, id: \.self) { index in
+                    Text(categories[index])
+                }
+            }
+
             TextField("Description", text: $description)
 
             Button(action: {
@@ -369,10 +380,12 @@ struct AddTransactionWithFriendView: View {
     }
 
     private func addTransactionSpecific() {
-        guard let amount = Double(totalAmount) else {
-            // Handle invalid amount
+        guard let amount = Double(totalAmount),
+              selectedCategoryIndex < categories.count else {
             return
         }
+
+        let selectedCategory = categories[selectedCategoryIndex]
 
         let db = Firestore.firestore()
         let newTransactionRef = db.collection("transactions").document()
@@ -380,6 +393,7 @@ struct AddTransactionWithFriendView: View {
             "id": newTransactionRef.documentID,
             "totalAmount": amount,
             "payerName": selectedFriend.name,
+            "category": selectedCategory,
             "description": description,
             "timestamp": FieldValue.serverTimestamp()
         ]
@@ -391,7 +405,6 @@ struct AddTransactionWithFriendView: View {
                 self.presentationMode.wrappedValue.dismiss()
             }
         }
-
     }
 }
 
@@ -481,31 +494,55 @@ struct AddFriendView: View {
     }
 }
 
-struct ExpensesPieChartView: View {
-    @State private var data: [ExpenseData] = []
+struct Pie: View {
+    @State private var slices: [(String, Double, Color)] = []
 
     var body: some View {
         VStack {
-            if !data.isEmpty {
-                PieChartView(data: data.map { $0.value }, title: "Expenses by Category", form: CGSize(width: 300, height: 300), dropShadow: false
+            Canvas { context, size in
 
 
-                )
+                let total = slices.reduce(0) { $0 + $1.1 }
+                context.translateBy(x: size.width * 0.5, y: size.height * 0.5)
 
-                    .padding()
-            } else {
-                Text("No data available.")
-                    .padding()
+                var startAngle = Angle.zero
+                let gapSize = Angle(degrees: 1) // size of the gap between slices in degrees
+                let radius = min(size.width, size.height) * 0.48
+
+                for (_, value, color) in slices {
+                    let angle = Angle(degrees: 360 * (value / total))
+                    let endAngle = startAngle + angle
+
+                    let path = Path { p in
+                        p.move(to: .zero)
+                        p.addArc(center: .zero, radius: radius, startAngle: startAngle + gapSize / 2, endAngle: endAngle, clockwise: false)
+                        p.closeSubpath()
+                    }
+
+                    context.fill(path, with: .color(color))
+                    startAngle = endAngle
+                }
             }
-        }
-        .onAppear {
-            fetchData()
+            .aspectRatio(1, contentMode: .fit)
+            .onAppear {
+                fetchData()
+            }
+            .navigationTitle("Charts")
+
+            // Legend
+            HStack(alignment: .center, spacing: 10) {
+                ForEach(slices.indices, id: \.self) { index in
+                    LegendItemView(category: slices[index].0, value: slices[index].1, color: slices[index].2)
+                }
+            }
+            .padding()
         }
     }
 
     private func fetchData() {
-
         let db = Firestore.firestore()
+        let categories = ["Utilities", "Groceries", "Transport", "Gift and donations", "Restaurant", "Clothing", "Other"]
+
         db.collection("transactions").getDocuments { snapshot, error in
             if let error = error {
                 print("Error fetching transactions: \(error.localizedDescription)")
@@ -514,37 +551,85 @@ struct ExpensesPieChartView: View {
                     return try? document.data(as: Transaction.self)
                 } ?? []
 
+                var categoryExpenses: [String: Double] = Dictionary(uniqueKeysWithValues: categories.map { ($0, 0) })
+                var total: Double = 0
 
-                let groupedByCategory = Dictionary(grouping: transactions, by: { $0.category })
-
-
-                guard let groceriesExpenses = groupedByCategory["Groceries"],
-                      let hobbiesExpenses = groupedByCategory["Hobie"] else {
-
-                    print("Not enough data for both Groceries and Hobbies.")
-                    return
+                for transaction in transactions {
+                    if let category = transaction.category {
+                        categoryExpenses[category, default: 0] += transaction.totalAmount
+                        total += transaction.totalAmount
+                    }
                 }
 
+                // Sort categories for consistent order in the chart
+                let sortedCategories = categories.sorted()
 
-                let totalGroceriesExpenses = groceriesExpenses.reduce(0) { $0 + $1.totalAmount }
-                let totalHobbiesExpenses = hobbiesExpenses.reduce(0) { $0 + $1.totalAmount }
+                // Assign colors based on the specified order
+                slices = sortedCategories.compactMap { category in
+                    guard let value = categoryExpenses[category] else {
+                        print("Category '\(category)' not found in expenses. Defaulting to gray.")
+                        return nil
+                    }
 
-                data = [
-                    ExpenseData(name: "Groceries", value: totalGroceriesExpenses,color: .blue),
-                    ExpenseData(name: "Hobbies", value: totalHobbiesExpenses,color: .red)
-                ]
+                    let minimumAngle: Double = 5
+                    //i dont know why but any smaller and charts break completely
+                    let angle = max((360 * (value / total)), minimumAngle)
+
+                    let color: Color
+                    switch category.lowercased() {
+                    case "utilities":
+                        color = .red
+                    case "groceries":
+                        color = .yellow
+                    case "transport":
+                        color = .blue
+                    case "gift and donations":
+                        color = .purple
+                    case "restaurant":
+                        color = .green
+                    case "clothing":
+                        color = .black
+                    case "other":
+                        color = .gray
+                    default:
+                        color = .gray
+                    }
+
+                    return (category, angle, color)
+                }
             }
         }
     }
 }
 
-// Define ExpenseData structure
-struct ExpenseData: Identifiable {
-    var id = UUID()
-    var name: String
+
+struct LegendItemView: View {
+    var category: String
     var value: Double
     var color: Color
+
+    var body: some View {
+        HStack {
+            Circle()
+                .fill(color)
+                .frame(width: 20, height: 20)
+
+            VStack(alignment: .leading) {
+                Text(category)
+                    .foregroundColor(.primary)
+                    .font(.caption)
+                Text(String(format: "%.2f", value))
+                    .foregroundColor(.primary)
+                    .font(.caption)
+            }
+        }
+    }
 }
+
+
+
+
+
 struct Friend: Identifiable, Codable {
     var id: String
     var name: String
@@ -554,7 +639,7 @@ struct Transaction: Identifiable, Codable {
     var id: String
     var totalAmount: Double
     var payerName: String
-    var category: String
+    var category: String?
     var description: String
     var timestamp: Timestamp
 
