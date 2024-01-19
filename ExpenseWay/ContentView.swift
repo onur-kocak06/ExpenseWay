@@ -18,7 +18,7 @@ struct ContentView: View {
                 /*
                  WelcomeView(email: $email, password: $password, isLoggedIn: $isLoggedIn)
                  .navigationTitle("Welcome")
-                */
+                 */
             }
         }
     }
@@ -47,29 +47,29 @@ struct WelcomeView: View {
                     .cornerRadius(8)
             }
             Button(action: {
-                            signUpWithFirebase()
-                        }) {
-                            Text("Sign Up")
-                                .foregroundColor(.white)
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(Color.green)
-                                .cornerRadius(8)
-                        }
+                signUpWithFirebase()
+            }) {
+                Text("Sign Up")
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color.green)
+                    .cornerRadius(8)
+            }
         }
         .padding()
-        
+
     }
     private func signUpWithFirebase() {
-           Auth.auth().createUser(withEmail: email, password: password) { result, error in
-               if let error = error {
-                   print("Sign up failed: \(error.localizedDescription)")
-               } else {
-                   isLoggedIn = true
+        Auth.auth().createUser(withEmail: email, password: password) { result, error in
+            if let error = error {
+                print("Sign up failed: \(error.localizedDescription)")
+            } else {
+                isLoggedIn = true
 
-               }
-           }
-       }
+            }
+        }
+    }
     private func loginWithFirebase() {
         Auth.auth().signIn(withEmail: email, password: password) { result, error in
             if let error = error {
@@ -414,11 +414,11 @@ struct AddTransactionWithFriendView: View {
 struct FriendsListView: View {
     @State private var friends: [Friend] = []
     @State private var selectedFriend: Friend?
-    
+
 
 
     var body: some View {
-        
+
         List(friends, id: \.id) { friend in
             NavigationLink(destination: TransactionWithFriend(selectedFriend: friend)) {
                 Text(friend.name)
@@ -435,7 +435,7 @@ struct FriendsListView: View {
                 Text("Add Friend")
             })
     }
-    
+
     private func fetchFriends() {
         let db = Firestore.firestore()
         db.collection("friends").getDocuments { snapshot, error in
@@ -530,11 +530,13 @@ struct Pie: View {
             .navigationTitle("Charts")
 
             // Legend
-            HStack(alignment: .center, spacing: 10) {
+            VStack(spacing: 0) {
                 ForEach(slices.indices, id: \.self) { index in
                     LegendItemView(category: slices[index].0, value: slices[index].1, color: slices[index].2)
+                        .frame(minWidth: 0, maxWidth: .infinity)
                 }
             }
+
             .padding()
         }
     }
@@ -614,14 +616,17 @@ struct LegendItemView: View {
                 .fill(color)
                 .frame(width: 20, height: 20)
 
+            Spacer()
+
             VStack(alignment: .leading) {
                 Text(category)
                     .foregroundColor(.primary)
                     .font(.caption)
-                Text(String(format: "%.2f", value))
-                    .foregroundColor(.primary)
-                    .font(.caption)
+                    .lineLimit(1)
+
             }
+
+            Spacer()
         }
     }
 }
@@ -630,10 +635,11 @@ struct LegendItemView: View {
 
 
 
+
 struct Friend: Identifiable, Codable {
     var id: String
     var name: String
-    
+
 }
 struct Transaction: Identifiable, Codable {
     var id: String
@@ -650,7 +656,7 @@ struct Transaction: Identifiable, Codable {
         case category
         case description
         case timestamp
-        
+
     }
 }
 
