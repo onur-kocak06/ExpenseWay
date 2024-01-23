@@ -2,23 +2,41 @@ import SwiftUI
 import Firebase
 import FirebaseFirestore
 import SwiftUICharts
+import CoreLocation
+
+
+
+
+
+
+
+
 
 struct ContentView: View {
     @State private var email = ""
     @State private var password = ""
     @State private var isLoggedIn = false
-
+   
     var body: some View {
+        
+        
+        
+        
+        
+        
+        
+        
         NavigationView {
             if isLoggedIn {
                 DashboardView()
             } else {
-                DashboardView()
+                //DashboardView()
+                
                 //Pie()
-                /*
+                
                  WelcomeView(email: $email, password: $password, isLoggedIn: $isLoggedIn)
                  .navigationTitle("Welcome")
-                 */
+                 
             }
         }
     }
@@ -128,6 +146,42 @@ struct DashboardView: View {
 }
 
 struct AddTransactionView: View {
+    
+    
+    private func getLocationInfo() {
+        let locationManager = CLLocationManager()
+        locationManager.requestWhenInUseAuthorization()
+
+        if let location = locationManager.location {
+            CLGeocoder().reverseGeocodeLocation(location) { placemarks, _ in
+                if let place = placemarks?.first {
+                    if let city = place.locality {
+                        self.userCity = city
+                    } else {
+                        self.userCity = "ERR"
+                    }
+                    
+                    if let country = place.country {
+                        self.userCountry = country
+                    } else {
+                        self.userCountry = "ERR"
+                    }
+                } else {
+                    self.userCity = "ERR"
+                    self.userCountry = "ERR"
+                }
+            }
+        } else {
+            self.userCity = "ERR"
+            self.userCountry = "ERR"
+        }
+    }
+    
+    
+    
+    @State private var userCity = "NF"
+    @State private var userCountry = "NF"
+  
     @State private var totalAmount = ""
     @State private var selectedFriendIndex = 0
     @State private var selectedCategoryIndex = 0
@@ -166,6 +220,7 @@ struct AddTransactionView: View {
         }
         .onAppear {
             fetchFriends()
+            getLocationInfo()
         }
         .padding()
         .navigationTitle("Add an Expense")
@@ -187,6 +242,7 @@ struct AddTransactionView: View {
         }
     }
     private func addTransaction() {
+        
         guard let amount = Double(totalAmount),
               selectedFriendIndex < friends.count,
               selectedCategoryIndex < categories.count else {
@@ -205,7 +261,8 @@ struct AddTransactionView: View {
             "payerName": selectedFriend.name,
             "category": selectedCategory,
             "description": description,
-            "timestamp": FieldValue.serverTimestamp()
+            "timestamp": FieldValue.serverTimestamp(),
+            "location": userCountry+", "+userCity
         ]
 
         newTransactionRef.setData(transactionData) { error in
@@ -216,7 +273,20 @@ struct AddTransactionView: View {
             }
         }
     }
+    
+    
 }
+
+    
+    
+    
+    
+    
+    
+    
+
+
+
 
 
 struct TransactionHistoryView: View {
@@ -229,6 +299,7 @@ struct TransactionHistoryView: View {
                 VStack(alignment: .leading) {
                     Text("Amount: \(transaction.totalAmount)")
                     Text("Payer: \(transaction.payerName)")
+                    Text("Location: \(transaction.location)")
                     Text("Description: \(transaction.description)")
                 }
             }
@@ -262,6 +333,7 @@ struct TransactionDetailsView: View {
         VStack(alignment: .leading) {
             Text("Amount: \(transaction.totalAmount)")
             Text("Payer: \(transaction.payerName)")
+            Text("Location: \(transaction.location)")
             Text("Description: \(transaction.description)")
 
             Button(action: {
@@ -647,6 +719,7 @@ struct Transaction: Identifiable, Codable {
     var payerName: String
     var category: String?
     var description: String
+    var location: String
     var timestamp: Timestamp
 
     enum CodingKeys: String, CodingKey {
@@ -655,12 +728,17 @@ struct Transaction: Identifiable, Codable {
         case payerName
         case category
         case description
+        case location
         case timestamp
 
     }
+    
 }
 
 
 #Preview {
     ContentView()
 }
+
+
+
